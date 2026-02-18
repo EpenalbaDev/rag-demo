@@ -1,0 +1,24 @@
+## Build artifacts
+backend/bin/
+backend/obj/
+
+## IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+## Environment / secrets
+.env
+appsettings.Development.json
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Claude Code
+CLAUDE.md
+
+## Python
+__pycache__/
+*.pyc
