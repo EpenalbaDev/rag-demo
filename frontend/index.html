@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RAG Demo — Inteligencia Documental | Grupo Altamira</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #07090f;
+    --bg2:       #0d1120;
+    --bg3:       #131929;
+    --border:    rgba(255,255,255,.07);
+    --pdf:       #f59e0b;
+    --pdf-dim:   rgba(245,158,11,.12);
+    --db:        #00d4aa;
+    --db-dim:    rgba(0,212,170,.12);
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --white:     #ffffff;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ══════════════ HERO ══════════════ */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    overflow: hidden;
+  }
+
+  .hero-glow {
+    position: absolute;
+    width: 700px; height: 700px;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+  }
+  .hero-glow.pdf { background: rgba(245,158,11,.15); top: -200px; left: -200px; }
+  .hero-glow.db  { background: rgba(0,212,170,.12);  bottom: -200px; right: -200px; }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: .5rem;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,.04);
+    padding: .35rem 1rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    animation: fadeUp .6s ease both;
+  }
+  .hero-badge span { color: var(--db); }
+
+  .hero h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2.8rem, 7vw, 6rem);
+    line-height: 1.05;
+    color: var(--white);
+    max-width: 900px;
+    animation: fadeUp .7s .1s ease both;
+  }
+  .hero h1 em {
+    font-style: italic;
+    background: linear-gradient(135deg, var(--pdf) 0%, var(--db) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero-sub {
+    margin-top: 1.5rem;
+    font-size: 1rem;
+    color: var(--muted);
+    max-width: 580px;
+    line-height: 1.7;
+    animation: fadeUp .7s .2s ease both;
+  }
+
+  .hero-cta {
+    margin-top: 2.5rem;
+    display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+    animation: fadeUp .7s .3s ease both;
+  }
+  .btn {
+    padding: .75rem 1.75rem;
+    border-radius: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: .85rem;
+    cursor: pointer;
+    transition: all .2s;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--db);
+    color: #07090f;
+    border: none;
+    font-weight: 500;
+  }
+  .btn-primary:hover { background: #00f0c0; transform: translateY(-1px); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--muted); transform: translateY(-1px); }
+
+  .scroll-hint {
+    position: absolute; bottom: 2rem;
+    display: flex; flex-direction: column; align-items: center; gap: .5rem;
+    color: var(--muted); font-size: .72rem; letter-spacing: .1em;
+    animation: bounce 2s infinite;
+  }
+  .scroll-hint svg { opacity: .4; }
+
+  /* ══════════════ SECTION LABEL ══════════════ */
+  .section-label {
+    font-size: .7rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: .75rem;
+  }
+
+  /* ══════════════ DEMO SECTION ══════════════ */
+  .demo {
+    padding: 5rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .demo-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+  .demo-header h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    color: var(--white);
+    margin-bottom: .75rem;
+  }
+  .demo-header p {
+    color: var(--muted);
+    font-size: .9rem;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.7;
+  }
+
+  .chat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  @media (max-width: 900px) { .chat-grid { grid-template-columns: 1fr; } }
+
+  .chat-panel {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg2);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  .chat-panel.pdf-panel { border-color: rgba(245,158,11,.2); }
+  .chat-panel.db-panel  { border-color: rgba(0,212,170,.2); }
+
+  .chat-panel-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: .75rem;
+  }
+  .source-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .pdf-panel .source-dot { background: var(--pdf); box-shadow: 0 0 8px var(--pdf); }
+  .db-panel  .source-dot { background: var(--db);  box-shadow: 0 0 8px var(--db); }
+
+  .chat-panel-header h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--white);
+  }
+  .source-tag {
+    margin-left: auto;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    padding: .2rem .6rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+  .pdf-panel .source-tag { background: var(--pdf-dim); color: var(--pdf); }
+  .db-panel  .source-tag { background: var(--db-dim);  color: var(--db); }
+
+  .chat-messages {
+    flex: 1;
+    padding: 1.25rem;
+    display: flex; flex-direction: column; gap: 1rem;
+    min-height: 340px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .msg {
+    display: flex; flex-direction: column; gap: .3rem;
+    animation: fadeUp .3s ease;
+  }
+  .msg-label {
+    font-size: .65rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .msg-bubble {
+    padding: .85rem 1rem;
+    border-radius: 10px;
+    font-size: .82rem;
+    line-height: 1.65;
+    max-width: 100%;
+    word-wrap: break-word;
+  }
+  .msg.user .msg-bubble {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    align-self: flex-end;
+    max-width: 85%;
+  }
+  .msg.ai.pdf-ai .msg-bubble {
+    background: var(--pdf-dim);
+    border: 1px solid rgba(245,158,11,.2);
+    color: var(--white);
+  }
+  .msg.ai.db-ai .msg-bubble {
+    background: var(--db-dim);
+    border: 1px solid rgba(0,212,170,.2);
+    color: var(--white);
+  }
+
+  .msg-loading .msg-bubble {
+    display: flex; gap: 4px; align-items: center; padding: 1rem;
+  }
+  .dot-bounce {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
+    animation: dotBounce 1.2s infinite;
+  }
+  .dot-bounce:nth-child(2) { animation-delay: .2s; }
+  .dot-bounce:nth-child(3) { animation-delay: .4s; }
+
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: .75rem; color: var(--muted); font-size: .8rem;
+    text-align: center; padding: 1rem;
+  }
+  .empty-icon { font-size: 2rem; opacity: .3; }
+
+  /* Chips de preguntas sugeridas */
+  .suggested-chips {
+    padding: .75rem 1.25rem;
+    border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .5rem;
+  }
+  .chip {
+    font-family: 'DM Mono', monospace;
+    font-size: .72rem;
+    padding: .35rem .75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .15s;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .pdf-panel .chip:hover { border-color: var(--pdf); color: var(--pdf); background: var(--pdf-dim); }
+  .db-panel  .chip:hover { border-color: var(--db);  color: var(--db);  background: var(--db-dim); }
+
+  /* Input área */
+  .chat-input-area {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border);
+    display: flex; gap: .75rem; align-items: flex-end;
+  }
+  .chat-input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .65rem .9rem;
+    font-family: 'DM Mono', monospace;
+    font-size: .82rem;
+    color: var(--text);
+    resize: none;
+    outline: none;
+    transition: border-color .2s;
+    min-height: 42px; max-height: 120px;
+  }
+  .pdf-panel .chat-input:focus { border-color: rgba(245,158,11,.4); }
+  .db-panel  .chat-input:focus { border-color: rgba(0,212,170,.4); }
+  .chat-input::placeholder { color: var(--muted); }
+
+  .send-btn {
+    width: 42px; height: 42px; flex-shrink: 0;
+    border-radius: 8px; border: none;
+    cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    transition: all .2s;
+    font-size: 1rem;
+  }
+  .pdf-panel .send-btn { background: var(--pdf); color: #07090f; }
+  .pdf-panel .send-btn:hover { background: #fbbf24; }
+  .db-panel  .send-btn { background: var(--db); color: #07090f; }
+  .db-panel  .send-btn:hover { background: #00f0c0; }
+  .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ══════════════ SOURCES SECTION ══════════════ */
+  .sources {
+    padding: 4rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .sources-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+  .sources-header h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(1.8rem, 3vw, 2.6rem);
+    color: var(--white);
+    margin-bottom: .75rem;
+  }
+  .sources-header p { color: var(--muted); font-size: .9rem; }
+
+  .sources-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+  @media (max-width: 900px) { .sources-grid { grid-template-columns: 1fr; } }
+
+  /* PDF Cards */
+  .source-column h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: .85rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: 1.25rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .pdf-col h3 { color: var(--pdf); }
+  .db-col  h3 { color: var(--db); }
+
+  .pdf-cards {
+    display: flex; flex-direction: column; gap: 1rem;
+  }
+
+  .pdf-card {
+    border: 1px solid rgba(245,158,11,.15);
+    border-radius: 12px;
+    background: var(--bg2);
+    padding: 1.25rem;
+    display: flex; gap: 1rem; align-items: flex-start;
+    transition: border-color .2s, transform .2s;
+    cursor: default;
+  }
+  .pdf-card:hover { border-color: rgba(245,158,11,.4); transform: translateX(4px); }
+
+  .pdf-icon {
+    width: 44px; height: 56px; flex-shrink: 0;
+    background: var(--pdf-dim);
+    border: 1px solid rgba(245,158,11,.2);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    color: var(--pdf);
+  }
+
+  .pdf-info h4 {
+    font-family: 'Syne', sans-serif;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: .3rem;
+  }
+  .pdf-info p {
+    font-size: .75rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .pdf-meta {
+    display: flex; gap: .75rem; margin-top: .5rem; flex-wrap: wrap;
+  }
+  .pdf-meta span {
+    font-size: .68rem;
+    padding: .15rem .5rem;
+    border-radius: 4px;
+    background: var(--pdf-dim);
+    color: var(--pdf);
+  }
+
+  /* DB Table Preview */
+  .db-preview {
+    border: 1px solid rgba(0,212,170,.15);
+    border-radius: 12px;
+    background: var(--bg2);
+    overflow: hidden;
+  }
+
+  .db-table-tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .db-tab {
+    padding: .75rem 1.25rem;
+    font-size: .75rem;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .2s;
+    border-bottom: 2px solid transparent;
+    background: none; border-top: none; border-left: none; border-right: none;
+    font-family: 'DM Mono', monospace;
+  }
+  .db-tab.active { color: var(--db); border-bottom-color: var(--db); }
+  .db-tab:hover:not(.active) { color: var(--text); }
+
+  .db-table-wrap {
+    overflow-x: auto;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .db-table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+  .db-table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: .75rem;
+  }
+  th {
+    padding: .65rem 1rem;
+    text-align: left;
+    background: var(--bg3);
+    color: var(--db);
+    font-weight: 500;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-size: .68rem;
+    white-space: nowrap;
+    position: sticky; top: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: .6rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  tr:hover td { background: rgba(0,212,170,.03); }
+  .badge {
+    display: inline-block; padding: .15rem .5rem;
+    border-radius: 4px; font-size: .68rem;
+  }
+  .badge-pagada   { background: rgba(34,197,94,.12);   color: #4ade80; }
+  .badge-pendiente{ background: rgba(234,179,8,.12);    color: #facc15; }
+  .badge-vencida  { background: rgba(239,68,68,.12);    color: #f87171; }
+  .badge-corp     { background: rgba(139,92,246,.12);   color: #a78bfa; }
+  .badge-pyme     { background: rgba(59,130,246,.12);   color: #60a5fa; }
+
+  /* ══════════════ CTA FOOTER ══════════════ */
+  .cta-section {
+    padding: 6rem 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 400px;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(ellipse, rgba(0,212,170,.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .cta-section h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    color: var(--white);
+    margin-bottom: 1rem;
+  }
+  .cta-section p {
+    color: var(--muted); font-size: .9rem;
+    max-width: 500px; margin: 0 auto 2.5rem;
+    line-height: 1.7;
+  }
+  .cta-links {
+    display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: .75rem;
+  }
+  footer a { color: var(--db); text-decoration: none; }
+
+  /* ══════════════ ANIMATIONS ══════════════ */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(6px); }
+  }
+  @keyframes dotBounce {
+    0%, 100% { transform: translateY(0); opacity: .4; }
+    50%       { transform: translateY(-5px); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════ HERO ══════ -->
+<section class="hero">
+  <div class="hero-glow pdf"></div>
+  <div class="hero-glow db"></div>
+
+  <div class="hero-badge">
+    <span>●</span> Sistema RAG en vivo — Grupo Altamira S.A.
+  </div>
+
+  <h1>Tu empresa ya tiene<br/><em>las respuestas.</em><br/>Solo necesita escucharlas.</h1>
+
+  <p class="hero-sub">
+    Demuestra el poder del RAG: pregunta a documentos PDF y a tu base de datos
+    en lenguaje natural. Sin SQL. Sin buscar en carpetas. Solo preguntas.
+  </p>
+
+  <div class="hero-cta">
+    <a href="#demo" class="btn btn-primary">Ver la demo →</a>
+    <a href="#fuentes" class="btn btn-ghost">Ver las fuentes de datos</a>
+  </div>
+
+  <div class="scroll-hint">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M12 5v14M5 12l7 7 7-7"/>
+    </svg>
+    scroll
+  </div>
+</section>
+
+<!-- ══════ DEMO ══════ -->
+<section class="demo" id="demo">
+  <div class="demo-header">
+    <p class="section-label">// demo interactiva</p>
+    <h2>Dos fuentes. Un lenguaje natural.</h2>
+    <p>Haz una pregunta a los documentos PDF de la empresa o consulta directamente la base de datos operacional.</p>
+  </div>
+
+  <div class="chat-grid">
+
+    <!-- PDF CHAT -->
+    <div class="chat-panel pdf-panel">
+      <div class="chat-panel-header">
+        <div class="source-dot"></div>
+        <h3>Documentos PDF</h3>
+        <span class="source-tag">PDF · RAG</span>
+      </div>
+
+      <div class="chat-messages" id="pdf-messages">
+        <div class="empty-state">
+          <div class="empty-icon">📄</div>
+          <p>Haz una pregunta sobre los reportes<br/>financieros de Grupo Altamira.</p>
+        </div>
+      </div>
+
+      <div class="suggested-chips" id="pdf-chips">
+        <button class="chip" onclick="sendChip('pdf', this)">¿Cuál fue el EBITDA en 2023?</button>
+        <button class="chip" onclick="sendChip('pdf', this)">Penalidades en contrato TechSupply</button>
+        <button class="chip" onclick="sendChip('pdf', this)">¿En qué países opera la empresa?</button>
+      </div>
+
+      <div class="chat-input-area">
+        <textarea class="chat-input" id="pdf-input"
+          placeholder="Pregunta sobre reportes, contratos, estados financieros..."
+          rows="1"
+          onkeydown="handleKey(event,'pdf')"
+          oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="pdf-btn" onclick="sendMessage('pdf')">→</button>
+      </div>
+    </div>
+
+    <!-- DB CHAT -->
+    <div class="chat-panel db-panel">
+      <div class="chat-panel-header">
+        <div class="source-dot"></div>
+        <h3>Base de Datos Operacional</h3>
+        <span class="source-tag">PostgreSQL · RAG</span>
+      </div>
+
+      <div class="chat-messages" id="db-messages">
+        <div class="empty-state">
+          <div class="empty-icon">🗄️</div>
+          <p>Consulta clientes, facturas, ventas<br/>y productos en lenguaje natural.</p>
+        </div>
+      </div>
+
+      <div class="suggested-chips" id="db-chips">
+        <button class="chip" onclick="sendChip('db', this)">¿Clientes con más deuda vencida?</button>
+        <button class="chip" onclick="sendChip('db', this)">Mejor margen pero menos ventas</button>
+        <button class="chip" onclick="sendChip('db', this)">Facturas vencidas más de 60 días</button>
+      </div>
+
+      <div class="chat-input-area">
+        <textarea class="chat-input" id="db-input"
+          placeholder="Pregunta sobre clientes, facturas, productos, ventas..."
+          rows="1"
+          onkeydown="handleKey(event,'db')"
+          oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="db-btn" onclick="sendMessage('db')">→</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════ FUENTES ══════ -->
+<section class="sources" id="fuentes">
+  <div class="sources-header">
+    <p class="section-label">// fuentes de conocimiento</p>
+    <h2>Datos reales. Respuestas precisas.</h2>
+    <p>El sistema indexa y comprende estas fuentes automáticamente al iniciar.</p>
+  </div>
+
+  <div class="sources-grid">
+
+    <!-- PDFs -->
+    <div class="source-column pdf-col">
+      <h3>
+        <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>
+        Documentos indexados
+      </h3>
+      <div class="pdf-cards">
+
+        <div class="pdf-card">
+          <div class="pdf-icon">📊</div>
+          <div class="pdf-info">
+            <h4>Reporte Anual 2023</h4>
+            <p>Resultados consolidados, resumen ejecutivo, análisis por segmento y perspectivas 2024.</p>
+            <div class="pdf-meta">
+              <span>Financiero</span>
+              <span>32 págs.</span>
+              <span>2023</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pdf-card">
+          <div class="pdf-icon">📈</div>
+          <div class="pdf-info">
+            <h4>Estados Financieros Q3</h4>
+            <p>Balance general, P&amp;L trimestral, flujo de caja y ratios financieros al 30-Sep-2023.</p>
+            <div class="pdf-meta">
+              <span>Contabilidad</span>
+              <span>18 págs.</span>
+              <span>Q3 2023</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pdf-card">
+          <div class="pdf-icon">📋</div>
+          <div class="pdf-info">
+            <h4>Contratos Proveedores</h4>
+            <p>Términos, montos, vigencias y penalidades de los principales contratos activos.</p>
+            <div class="pdf-meta">
+              <span>Legal</span>
+              <span>24 págs.</span>
+              <span>Vigente</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- DB Preview -->
+    <div class="source-column db-col">
+      <h3>
+        <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z"/><path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z"/><path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z"/></svg>
+        Base de datos operacional
+      </h3>
+
+      <div class="db-preview">
+        <div class="db-table-tabs">
+          <button class="db-tab active" onclick="showTable('facturas-table', this)">facturas</button>
+          <button class="db-tab" onclick="showTable('clientes-table', this)">clientes</button>
+          <button class="db-tab" onclick="showTable('productos-table', this)">productos</button>
+        </div>
+
+        <!-- FACTURAS -->
+        <div class="db-table-wrap" id="facturas-table">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Cliente</th><th>Monto</th><th>Estado</th><th>Días venc.</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>12</td><td>Clínica Santa Fe</td><td>$4,500</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">92</td></tr>
+              <tr><td>19</td><td>Restaurantes La Plaza</td><td>$1,200</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">91</td></tr>
+              <tr><td>18</td><td>Seguros del Istmo</td><td>$3,600</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">77</td></tr>
+              <tr><td>02</td><td>Grupo Torre Alta</td><td>$3,600</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">62</td></tr>
+              <tr><td>06</td><td>Distribuidora El Volcán</td><td>$4,500</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">62</td></tr>
+              <tr><td>09</td><td>Hotel Miramar</td><td>$3,600</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">46</td></tr>
+              <tr><td>04</td><td>Constructora Pacífico</td><td>$6,500</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">46</td></tr>
+              <tr><td>14</td><td>Importadora Los Andes</td><td>$2,500</td><td><span class="badge badge-vencida">vencida</span></td><td style="color:#f87171">47</td></tr>
+              <tr><td>01</td><td>Grupo Torre Alta</td><td>$12,000</td><td><span class="badge badge-pagada">pagada</span></td><td>—</td></tr>
+              <tr><td>17</td><td>Banco Regional</td><td>$8,000</td><td><span class="badge badge-pagada">pagada</span></td><td>—</td></tr>
+              <tr><td>13</td><td>Tecnología Avanzada</td><td>$12,000</td><td><span class="badge badge-pendiente">pendiente</span></td><td>—</td></tr>
+              <tr><td>08</td><td>Tecnología Avanzada</td><td>$12,000</td><td><span class="badge badge-pendiente">pendiente</span></td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- CLIENTES -->
+        <div class="db-table-wrap" id="clientes-table" style="display:none">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Nombre</th><th>Segmento</th><th>País</th><th>Límite crédito</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>11</td><td>Banco Regional S.A.</td><td><span class="badge badge-corp">Corporativo</span></td><td>Panamá</td><td>$800,000</td></tr>
+              <tr><td>12</td><td>Seguros del Istmo</td><td><span class="badge badge-corp">Corporativo</span></td><td>Panamá</td><td>$600,000</td></tr>
+              <tr><td>01</td><td>Grupo Torre Alta S.A.</td><td><span class="badge badge-corp">Corporativo</span></td><td>Panamá</td><td>$500,000</td></tr>
+              <tr><td>06</td><td>Supermercados Riba Smith</td><td><span class="badge badge-corp">Corporativo</span></td><td>Panamá</td><td>$450,000</td></tr>
+              <tr><td>02</td><td>Constructora Pacífico</td><td><span class="badge badge-corp">Corporativo</span></td><td>Panamá</td><td>$350,000</td></tr>
+              <tr><td>08</td><td>Tecnología Avanzada S.A.</td><td><span class="badge badge-corp">Corporativo</span></td><td>Panamá</td><td>$300,000</td></tr>
+              <tr><td>05</td><td>Hotel Miramar</td><td><span class="badge badge-corp">Corporativo</span></td><td>Panamá</td><td>$200,000</td></tr>
+              <tr><td>14</td><td>Logística Ágil S.A.</td><td><span class="badge badge-pyme">PYME</span></td><td>Panamá</td><td>$110,000</td></tr>
+              <tr><td>09</td><td>Importadora Los Andes</td><td><span class="badge badge-pyme">PYME</span></td><td>Colombia</td><td>$90,000</td></tr>
+              <tr><td>04</td><td>Distribuidora El Volcán</td><td><span class="badge badge-pyme">PYME</span></td><td>Panamá</td><td>$80,000</td></tr>
+              <tr><td>10</td><td>Servicios Globales CR</td><td><span class="badge badge-pyme">PYME</span></td><td>Costa Rica</td><td>$70,000</td></tr>
+              <tr><td>03</td><td>Farmacia San Judas</td><td><span class="badge badge-pyme">PYME</span></td><td>Panamá</td><td>$50,000</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- PRODUCTOS -->
+        <div class="db-table-wrap" id="productos-table" style="display:none">
+          <table>
+            <thead>
+              <tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Margen</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Software ERP Empresarial</td><td>Software</td><td>$12,000</td><td style="color:#4ade80">80%</td></tr>
+              <tr><td>Módulo RRHH Add-on</td><td>Software</td><td>$2,200</td><td style="color:#4ade80">80%</td></tr>
+              <tr><td>Módulo Inventario Add-on</td><td>Software</td><td>$1,800</td><td style="color:#4ade80">80%</td></tr>
+              <tr><td>Software ERP Básico</td><td>Software</td><td>$4,500</td><td style="color:#4ade80">80%</td></tr>
+              <tr><td>Soporte Anual Premium</td><td>Servicios</td><td>$3,600</td><td style="color:#4ade80">80%</td></tr>
+              <tr><td>Soporte Anual Básico</td><td>Servicios</td><td>$1,200</td><td style="color:#a3e635">70%</td></tr>
+              <tr><td>Capacitación Usuarios</td><td>Servicios</td><td>$2,500</td><td style="color:#a3e635">68%</td></tr>
+              <tr><td>Consultoría Implementación</td><td>Servicios</td><td>$8,000</td><td style="color:#facc15">60%</td></tr>
+              <tr><td>Licencias Microsoft 365</td><td>Software</td><td>$180</td><td style="color:#facc15">33%</td></tr>
+              <tr><td>Hardware Servidor Dell</td><td>Hardware</td><td>$6,500</td><td style="color:#f87171">20%</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════ CTA ══════ -->
+<section class="cta-section">
+  <h2>¿Tu empresa tiene datos<br/>sin explotar?</h2>
+  <p>Este es un demo. Tu implementación real puede conectar tus propios documentos, tu ERP, tu CRM, o cualquier base de datos.</p>
+  <div class="cta-links">
+    <a href="mailto:contacto@tudominio.com" class="btn btn-primary">Hablar con el equipo →</a>
+    <a href="#demo" class="btn btn-ghost">Seguir explorando</a>
+  </div>
+</section>
+
+<footer>
+  <p>Demo construida con <a href="https://dotnet.microsoft.com">.NET 8</a> + <a href="https://github.com/microsoft/semantic-kernel">Semantic Kernel</a> + OpenAI · Desplegada en <a href="https://railway.app">Railway</a></p>
+  <p style="margin-top:.5rem; opacity:.5">Grupo Altamira S.A. es una empresa ficticia creada para esta demo.</p>
+</footer>
+
+<script>
+const STATE = { pdf: { loading: false }, db: { loading: false } };
+
+async function sendMessage(source) {
+  const inputEl = document.getElementById(`${source}-input`);
+  const question = inputEl.value.trim();
+  if (!question || STATE[source].loading) return;
+
+  inputEl.value = '';
+  autoResize(inputEl);
+  await doQuery(source, question);
+}
+
+async function sendChip(source, btn) {
+  const question = btn.textContent.trim();
+  if (STATE[source].loading) return;
+  await doQuery(source, question);
+}
+
+async function doQuery(source, question) {
+  const msgSource = source === 'pdf' ? 'pdf-ai' : 'db-ai';
+  const messagesEl = document.getElementById(`${source}-messages`);
+
+  // Limpiar empty state
+  const emptyState = messagesEl.querySelector('.empty-state');
+  if (emptyState) emptyState.remove();
+
+  // Agregar mensaje usuario
+  appendMessage(messagesEl, 'user', null, question);
+
+  // Loading
+  STATE[source].loading = true;
+  document.getElementById(`${source}-btn`).disabled = true;
+  const loadingEl = appendLoading(messagesEl, msgSource);
+
+  try {
+    const res = await fetch('/api/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, source })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    loadingEl.remove();
+    appendMessage(messagesEl, 'ai ' + msgSource, source === 'pdf' ? 'PDF' : 'PostgreSQL', data.answer);
+  } catch (err) {
+    loadingEl.remove();
+    appendMessage(messagesEl, 'ai ' + msgSource, 'Error', '⚠ No se pudo conectar con el servidor. Asegúrate que el backend esté corriendo.');
+  } finally {
+    STATE[source].loading = false;
+    document.getElementById(`${source}-btn`).disabled = false;
+  }
+}
+
+function appendMessage(container, classes, label, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${classes}`;
+
+  if (label) {
+    const lbl = document.createElement('div');
+    lbl.className = 'msg-label';
+    lbl.textContent = label === 'PDF' ? '📄 PDF' : label === 'PostgreSQL' ? '🗄 PostgreSQL' : 'Tú';
+    div.appendChild(lbl);
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+  div.appendChild(bubble);
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+function appendLoading(container, sourceClass) {
+  const div = document.createElement('div');
+  div.className = `msg ai ${sourceClass} msg-loading`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.innerHTML = '<div class="dot-bounce"></div><div class="dot-bounce"></div><div class="dot-bounce"></div>';
+  div.appendChild(bubble);
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+function handleKey(e, source) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage(source);
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function showTable(tableId, tab) {
+  document.querySelectorAll('.db-table-wrap').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.db-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(tableId).style.display = 'block';
+  tab.classList.add('active');
+}
+</script>
+</body>
+</html>
