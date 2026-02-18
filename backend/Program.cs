@@ -26,6 +26,7 @@ builder.Services.AddSingleton<IVectorStore, InMemoryVectorStore>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddScoped<PdfIngestionService>();
 builder.Services.AddScoped<PostgresIngestionService>();
+builder.Services.AddSingleton<RateLimiterService>();
 builder.Services.AddControllers();
 
 // Servir frontend estático

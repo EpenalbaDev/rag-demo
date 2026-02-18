@@ -867,10 +867,17 @@ async function doQuery(source, question) {
       body: JSON.stringify({ question, source: source === 'db' ? 'postgres' : source })
     });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-
     loadingEl.remove();
+
+    if (!res.ok) {
+      const errMsg = res.status === 429
+        ? '⚠ Has alcanzado el límite de 7 consultas por hora. Vuelve más tarde.'
+        : `⚠ Error del servidor (${res.status})`;
+      appendMessage(messagesEl, 'ai ' + msgSource, 'Error', errMsg);
+      return;
+    }
+
     appendMessage(messagesEl, 'ai ' + msgSource, source === 'pdf' ? 'PDF' : 'PostgreSQL', data.answer);
   } catch (err) {
     loadingEl.remove();
