@@ -1,3 +1,5 @@
+#pragma warning disable SKEXP0001, SKEXP0010, SKEXP0020, SKEXP0050
+
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.InMemory;
